@@ -1,0 +1,18 @@
+{
+  "name": "Haiku 5.5 — Open Source Claude Chatbot",
+  "short_name": "Haiku 5.5",
+  "description": "Fast, smooth, GitHub Pages-ready AI chatbot powered by Claude Haiku 5.5 (claude-haiku-5-5).",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#131210",
+  "theme_color": "#131210",
+  "icons": [
+    {
+      "src": "./assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

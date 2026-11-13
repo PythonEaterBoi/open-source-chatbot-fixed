@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Fast, smooth, open-source AI chatbot powered by Anthropic Claude Haiku 5.5 (claude-haiku-5-5). 100% static & GitHub Pages compatible." />
+  <meta name="theme-color" content="#131210" id="meta-theme-color" />
+  <title>Haiku 5.5 — Smooth Claude AI Chat</title>
+
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+
+  <!-- Optional typography enhancement (gracefully falls back to native system fonts offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="./css/styles.css" />
+
+  <!-- Puter.js v2 for optional zero-key browser inference on GitHub Pages (loaded async, non-blocking) -->
+  <script src="https://js.puter.com/v2/" async data-puter-sdk="true"></script>
+</head>
+<body>
+  <div id="app-shell" class="app-shell">
+    <!-- Mobile backdrop -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar" aria-label="Conversations">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="22" height="22" fill="none">
+              <path d="M16 3.5C17.1 11.2 20.8 14.9 28.5 16C20.8 17.1 17.1 20.8 16 28.5C14.9 20.8 11.2 17.1 3.5 16C11.2 14.9 14.9 11.2 16 3.5Z" fill="currentColor"/>
+              <circle cx="24" cy="8" r="2" fill="currentColor" opacity="0.75"/>
+            </svg>
+          </div>
+          <div class="brand-copy">
+            <span class="brand-title">Haiku 5.5</span>
+            <span class="brand-sub">claude-haiku-5-5</span>
+          </div>
+        </div>
+        <button type="button" id="sidebar-close-btn" class="icon-btn sidebar-toggle-btn" title="Collapse sidebar (Ctrl+B)" aria-label="Collapse sidebar">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/>
+            <line x1="7.5" y1="3.5" x2="7.5" y2="16.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar-actions">
+        <button type="button" id="new-chat-btn" class="new-chat-btn">
+          <span class="new-chat-left">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <line x1="10" y1="4" x2="10" y2="16"/>
+              <line x1="4" y1="10" x2="16" y2="10"/>
+            </svg>
+            <span>New chat</span>
+          </span>
+          <kbd class="kbd-hint">⌘K</kbd>
+        </button>
+
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7">
+            <circle cx="8.8" cy="8.8" r="5.5"/>
+            <line x1="13" y1="13" x2="16.8" y2="16.8" stroke-linecap="round"/>
+          </svg>
+          <input type="search" id="chat-search-input" class="search-input" placeholder="Search chats…" autocomplete="off" aria-label="Search conversations" />
+          <button type="button" id="chat-search-clear" class="search-clear hidden" aria-label="Clear search">×</button>
+        </div>
+      </div>
+
+      <nav id="chat-list" class="chat-list" aria-label="Chat history"></nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-quick-row">
+          <button type="button" id="theme-toggle-btn" class="ghost-pill-btn" title="Switch color theme" aria-label="Switch color theme">
+            <svg id="theme-icon-sun" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6">
+              <circle cx="10" cy="10" r="3.6"/>
+              <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke-linecap="round"/>
+            </svg>
+            <span id="theme-label">Theme</span>
+          </button>
+          <button type="button" id="open-data-btn" class="ghost-pill-btn" title="Backup & Import chats">
+            <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3v9m0 0l-3-3m3 3l3-3"/>
+              <path d="M3.5 13.5v2a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2"/>
+            </svg>
+            <span>Backup</span>
+          </button>
+          <button type="button" id="open-shortcuts-btn" class="ghost-pill-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+            <span>?</span>
+          </button>
+        </div>
+
+        <button type="button" id="open-settings-btn" class="settings-card-btn">
+          <div class="settings-card-info">
+            <span class="settings-card-title" id="sidebar-settings-title">Settings & API Keys</span>
+            <span class="settings-card-sub" id="sidebar-settings-sub">Claude Haiku 5.5 · Balanced</span>
+          </div>
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="10" cy="10" r="2.6"/>
+            <path d="M16.2 10a6.2 6.2 0 0 0-.1-1l1.6-1.2-1.5-2.6-1.9.7a6 6 0 0 0-1.7-1l-.3-2h-3l-.3 2a6 6 0 0 0-1.7 1l-1.9-.7-1.5 2.6L5.5 9a6.2 6.2 0 0 0 0 2l-1.6 1.2 1.5 2.6 1.9-.7a6 6 0 0 0 1.7 1l.3 2h3l.3-2a6 6 0 0 0 1.7-1l1.9.7 1.5-2.6-1.6-1.2c.1-.3.1-.7.1-1Z" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main id="main-panel" class="main-panel">
+      <!-- Top Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button type="button" id="sidebar-open-btn" class="icon-btn" title="Open sidebar (Ctrl+B)" aria-label="Open sidebar">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+              <line x1="3" y1="5.5" x2="17" y2="5.5"/>
+              <line x1="3" y1="10" x2="17" y2="10"/>
+              <line x1="3" y1="14.5" x2="13" y2="14.5"/>
+            </svg>
+          </button>
+
+          <!-- Model Selector -->
+          <div class="dropdown-wrap">
+            <button type="button" id="model-select-btn" class="Selector-pill" aria-haspopup="listbox" aria-expanded="false">
+              <span class="model-dot" aria-hidden="true"></span>
+              <span id="active-model-label" class="selector-label">Claude Haiku 5.5</span>
+              <span class="selector-tag">5.5</span>
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <polyline points="4,6 8,10 12,6"/>
+              </svg>
+            </button>
+            <div id="model-dropdown" class="dropdown-menu hidden" role="listbox" aria-label="Select Claude model"></div>
+          </div>
+
+          <!-- Persona Selector -->
+          <div class="dropdown-wrap hide-xs">
+            <button type="button" id="persona-select-btn" class="subtle-pill" aria-haspopup="listbox" aria-expanded="false" title="System persona">
+              <span id="active-persona-label">Balanced Assistant</span>
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <polyline points="4,6 8,10 12,6"/>
+              </svg>
+            </button>
+            <div id="persona-dropdown" class="dropdown-menu hidden" role="listbox" aria-label="Select persona"></div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div id="context-meter" class="context-meter hide-sm" title="Estimated context window usage & cost on Claude Haiku 5.5 ($0.10/M input, $0.50/M output)">
+            <span id="context-tokens-text">0 / 1M tok</span>
+          </div>
+
+          <button type="button" id="connection-pill-btn" class="connection-pill" title="Configure AI provider or API key">
+            <span id="connection-dot" class="status-dot status-ready"></span>
+            <span id="connection-label">Puter Cloud</span>
+          </button>
+
+          <button type="button" id="export-md-btn" class="icon-btn" title="Export chat as Markdown (.md)" aria-label="Export chat as Markdown">
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12.5 3H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5L12.5 3Z"/>
+              <polyline points="12,3 12,7 16,7"/>
+              <path d="M10 9.5v4.5m0 0l-2-2m2 2l2-2"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Conversation Area -->
+      <div id="chat-viewport" class="chat-viewport">
+        <!-- Empty / Welcome Screen -->
+        <section id="welcome-screen" class="welcome-screen">
+          <div class="welcome-hero">
+            <div class="welcome-emblem" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="38" height="38" fill="none">
+                <path d="M24 5C25.7 16.8 31.2 22.3 43 24C31.2 25.7 25.7 31.2 24 43C22.3 31.2 16.8 25.7 5 24C16.8 22.3 22.3 16.8 24 5Z" fill="currentColor"/>
+                <circle cx="36" cy="12" r="2.6" fill="currentColor" opacity="0.8"/>
+              </svg>
+            </div>
+            <h1 id="welcome-heading" class="welcome-title">Fast thought, clear craft.</h1>
+            <p class="welcome-subtitle">
+              Powered by <strong>Claude Haiku 5.5</strong> (<code>claude-haiku-5-5</code>) — 1M token context, adaptive thinking, multimodal vision, and instant browser streaming.
+            </p>
+
+            <div class="capability-chips" aria-label="Model capabilities">
+              <span class="cap-chip">⚡ ~240 tok/s velocity</span>
+              <span class="cap-chip">🧠 Adaptive Thinking</span>
+              <span class="cap-chip">🖼️ Vision &amp; Code Files</span>
+              <span class="cap-chip">🌐 100% Static Web Ready</span>
+            </div>
+
+            <div id="welcome-connection-bar" class="welcome-connection-bar"></div>
+          </div>
+
+          <div id="starter-grid" class="starter-grid" aria-label="Suggested prompts"></div>
+        </section>
+
+        <!-- Active Thread Messages -->
+        <div id="messages-list" class="messages-list hidden" role="log" aria-live="polite"></div>
+      </div>
+
+      <!-- Floating Jump-to-Bottom Pill -->
+      <button type="button" id="scroll-bottom-btn" class="scroll-bottom-btn hidden" aria-label="Scroll to latest message">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3v10m0 0l-4-4m4 4l4-4"/>
+        </svg>
+        <span>Latest</span>
+      </button>
+
+      <!-- Bottom Composer -->
+      <div class="composer-shell">
+        <div class="composer-inner">
+          <!-- Edit Mode Banner -->
+          <div id="edit-banner" class="edit-banner hidden">
+            <div class="edit-banner-text">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5Z"/></svg>
+              <span>Editing earlier message — sending will regenerate from this point</span>
+            </div>
+            <button type="button" id="cancel-edit-btn" class="text-btn">Cancel</button>
+          </div>
+
+          <!-- Staged Attachments -->
+          <div id="attachment-tray" class="attachment-tray hidden" aria-label="Attached files"></div>
+
+          <!-- Composer Input Box -->
+          <div id="composer-card" class="composer-card">
+            <textarea
+              id="composer-input"
+              class="composer-textarea"
+              rows="1"
+              placeholder="Message Claude Haiku 5.5… (Paste or drop images & code files)"
+              aria-label="Message input"
+            ></textarea>
+
+            <div class="composer-toolbar">
+              <div class="composer-tools-left">
+                <input
+                  type="file"
+                  id="file-input"
+                  class="sr-only"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.markdown,.json,.csv,.js,.ts,.jsx,.tsx,.py,.html,.css,.sql,.yaml,.yml,.toml,.xml,.sh,.rs,.go,.java,.c,.cpp"
+                />
+                <button type="button" id="attach-btn" class="tool-btn" title="Attach images or text/code files">
+                  <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15.5 9.8l-6.4 6.4a4 4 0 0 1-5.7-5.7l6.7-6.7a2.6 2.6 0 0 1 3.7 3.7l-6.6 6.6a1.3 1.3 0 0 1-1.9-1.9l6-6"/>
+                  </svg>
+                  <span class="hide-xs">Attach</span>
+                </button>
+
+                <button type="button" id="voice-btn" class="tool-btn hidden" title="Voice dictation" aria-label="Voice input">
+                  <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+                    <rect x="7" y="2.5" width="6" height="9.5" rx="3"/>
+                    <path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5M7.5 17.5h5"/>
+                  </svg>
+                </button>
+
+                <!-- Adaptive Thinking Effort Selector -->
+                <div class="dropdown-wrap">
+                  <button type="button" id="effort-btn" class="tool-btn effort-pill" aria-haspopup="listbox" aria-expanded="false" title="Claude Haiku 5.5 Adaptive Thinking effort">
+                    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                      <path d="M10 2.5a5.5 5.5 0 0 0-3.5 9.7c.6.5 1 1.2 1 2v.8h5v-.8c0-.8.4-1.5 1-2A5.5 5.5 0 0 0 10 2.5Z"/>
+                      <line x1="8" y1="17.5" x2="12" y2="17.5"/>
+                    </svg>
+                    <span>Thinking: <strong id="effort-label">Medium</strong></span>
+                  </button>
+                  <div id="effort-dropdown" class="dropdown-menu dropdown-up hidden" role="listbox" aria-label="Adaptive thinking effort"></div>
+                </div>
+              </div>
+
+              <div class="composer-tools-right">
+                <span id="draft-counter" class="draft-counter" aria-live="off"></span>
+
+                <button type="button" id="stop-btn" class="stop-btn hidden" title="Stop generating (Esc)">
+                  <span class="stop-square" aria-hidden="true"></span>
+                  <span>Stop</span>
+                </button>
+
+                <button type="button" id="send-btn" class="send-btn" disabled title="Send message (Enter)" aria-label="Send message">
+                  <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 15.5V4.5m0 0L5.5 9M10 4.5L14.5 9"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer-footnote">
+            <span>Powered by <strong>Claude Haiku 5.5</strong> · Browser-native static app · Conversations &amp; keys stay local</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Live HTML / SVG Artifact Preview Drawer -->
+    <aside id="artifact-drawer" class="artifact-drawer hidden" aria-label="Live code preview">
+      <div class="artifact-header">
+        <div class="artifact-title-wrap">
+          <span class="artifact-dot"></span>
+          <span class="artifact-title">Live Artifact Preview</span>
+        </div>
+        <div class="artifact-controls">
+          <button type="button" id="artifact-refresh-btn" class="icon-btn" title="Reload preview" aria-label="Reload preview">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 10a6 6 0 1 1-1.6-4.1M16 3.5v3h-3"/>
+            </svg>
+          </button>
+          <button type="button" id="artifact-newtab-btn" class="icon-btn" title="Open in new tab" aria-label="Open preview in new tab">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4h5v5M16 4l-7.5 7.5M15 11.5V15a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 4 15V7a1.5 1.5 0 0 1 1.5-1.5H8.5"/>
+            </svg>
+          </button>
+          <button type="button" id="artifact-close-btn" class="icon-btn" title="Close preview" aria-label="Close preview">
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <line x1="5" y1="5" x2="15" y2="15"/>
+              <line x1="15" y1="5" x2="5" y2="15"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="artifact-body">
+        <iframe id="artifact-iframe" class="artifact-iframe" sandbox="allow-scripts" title="Sandboxed HTML Preview"></iframe>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Drag & Drop Overlay -->
+  <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+    <div class="drop-card">
+      <div class="drop-icon">＋</div>
+      <div class="drop-title">Drop images or code files</div>
+      <div class="drop-sub">PNG, JPEG, WEBP, GIF, Markdown, JSON, TypeScript, Python &amp; more</div>
+    </div>
+  </div>
+
+  <!-- Settings & Connection Modal -->
+  <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2 id="settings-modal-title" class="modal-title">Workspace &amp; Claude Haiku 5.5 Settings</h2>
+          <p class="modal-subtitle">Configure browser-direct AI connection, adaptive thinking, and local backups.</p>
+        </div>
+        <button type="button" id="close-settings-btn" class="icon-btn" aria-label="Close settings">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <line x1="5" y1="5" x2="15" y2="15"/>
+            <line x1="15" y1="5" x2="5" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-tabs" role="tablist">
+        <button type="button" class="modal-tab is-active" data-tab="connection" role="tab" aria-selected="true">Connection &amp; Keys</button>
+        <button type="button" class="modal-tab" data-tab="model" role="tab" aria-selected="false">Model &amp; Persona</button>
+        <button type="button" class="modal-tab" data-tab="data" role="tab" aria-selected="false">Backup &amp; Privacy</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Tab 1: Connection -->
+        <section id="tab-connection" class="tab-pane is-active">
+          <label class="field-label">Inference Provider (GitHub Pages Compatible)</label>
+          <div id="provider-cards" class="provider-cards"></div>
+
+          <div id="anthropic-key-group" class="field-group hidden">
+            <label for="anthropic-key-input" class="field-label">Anthropic API Key (<code>claude-haiku-5-5</code>)</label>
+            <div class="secret-input-row">
+              <input type="password" id="anthropic-key-input" class="text-input mono" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false" />
+              <button type="button" class="ghost-btn toggle-secret-btn" data-target="anthropic-key-input">Show</button>
+            </div>
+            <p class="field-help">
+              Calls <code>https://api.anthropic.com/v1/messages</code> directly from your browser via Anthropic’s official CORS header. Never hard-code keys into source files.
+            </p>
+
+            <label for="anthropic-endpoint-input" class="field-label mt-sm">Endpoint URL</label>
+            <input type="url" id="anthropic-endpoint-input" class="text-input mono" placeholder="https://api.anthropic.com/v1/messages" />
+          </div>
+
+          <div id="openrouter-key-group" class="field-group hidden">
+            <label for="openrouter-key-input" class="field-label">OpenRouter / Gateway API Key</label>
+            <div class="secret-input-row">
+              <input type="password" id="openrouter-key-input" class="text-input mono" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false" />
+              <button type="button" class="ghost-btn toggle-secret-btn" data-target="openrouter-key-input">Show</button>
+            </div>
+            <label for="openrouter-endpoint-input" class="field-label mt-sm">Chat Completions Endpoint</label>
+            <input type="url" id="openrouter-endpoint-input" class="text-input mono" placeholder="https://openrouter.ai/api/v1/chat/completions" />
+          </div>
+
+          <div class="field-group">
+            <label class="checkbox-row">
+              <input type="checkbox" id="ephemeral-keys-checkbox" />
+              <span><strong>Session-only key storage</strong> — forget API keys automatically when this browser tab closes</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Tab 2: Model & Persona -->
+        <section id="tab-model" class="tab-pane hidden">
+          <div class="grid-2">
+            <div class="field-group">
+              <label for="settings-model-select" class="field-label">Claude Model</label>
+              <select id="settings-model-select" class="select-input"></select>
+            </div>
+            <div class="field-group">
+              <label for="custom-model-input" class="field-label">Custom Model ID Override (Optional)</label>
+              <input type="text" id="custom-model-input" class="text-input mono" placeholder="e.g. claude-haiku-5-5" />
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field-group">
+              <label for="temperature-range" class="field-label">Temperature: <span id="temperature-val">0.7</span></label>
+              <input type="range" id="temperature-range" min="0" max="1" step="0.05" value="0.7" class="range-input" />
+              <p class="field-help">Used when Adaptive Thinking is set to Instant (Off) or on compatible gateways.</p>
+            </div>
+            <div class="field-group">
+              <label for="max-tokens-input" class="field-label">Max Output Tokens (up to 128K)</label>
+              <input type="number" id="max-tokens-input" min="256" max="128000" step="256" value="8192" class="text-input mono" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="settings-persona-select" class="field-label">System Persona</label>
+            <select id="settings-persona-select" class="select-input"></select>
+          </div>
+
+          <div class="field-group">
+            <label for="custom-system-textarea" class="field-label">System Prompt Instructions</label>
+            <textarea id="custom-system-textarea" class="textarea-input" rows="4" placeholder="You are Claude Haiku 5.5..."></textarea>
+          </div>
+
+          <div class="field-group">
+            <label class="checkbox-row">
+              <input type="checkbox" id="prompt-caching-checkbox" checked />
+              <span><strong>Enable Ephemeral Prompt Caching</strong> on Anthropic API ($0.01/M cached read tokens on Haiku 5.5)</span>
+            </label>
+            <label class="checkbox-row mt-xs">
+              <input type="checkbox" id="send-enter-checkbox" checked />
+              <span>Press <kbd>Enter</kbd> to send (<kbd>Shift+Enter</kbd> for newline)</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Tab 3: Backup & Privacy -->
+        <section id="tab-data" class="tab-pane hidden">
+          <div class="info-callout">
+            <strong>100% Client-Side Privacy:</strong> All chat threads and settings live inside your browser’s storage. Exporting a backup never includes your API keys.
+          </div>
+
+          <div class="data-actions-grid">
+            <button type="button" id="export-json-btn" class="secondary-btn">
+              <span>Export Workspace (.json)</span>
+            </button>
+            <label class="secondary-btn file-label-btn">
+              <span>Import Workspace (.json)</span>
+              <input type="file" id="import-json-input" accept=".json,application/json" class="sr-only" />
+            </label>
+          </div>
+
+          <div class="danger-zone">
+            <div>
+              <strong>Clear All Local Conversations</strong>
+              <p class="field-help">Permanently deletes all saved conversations in this browser.</p>
+            </div>
+            <button type="button" id="clear-all-chats-btn" class="danger-btn">Delete All Chats</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="cancel-settings-btn" class="ghost-btn">Cancel</button>
+        <button type="button" id="save-settings-btn" class="primary-btn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div id="shortcuts-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+    <div class="modal-panel modal-panel-sm">
+      <div class="modal-header">
+        <h2 id="shortcuts-title" class="modal-title">Keyboard Shortcuts</h2>
+        <button type="button" id="close-shortcuts-btn" class="icon-btn" aria-label="Close shortcuts">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <line x1="5" y1="5" x2="15" y2="15"/>
+            <line x1="15" y1="5" x2="5" y2="15"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body shortcuts-list">
+        <div class="shortcut-row"><span>New conversation</span><div><kbd>⌘ / Ctrl</kbd> + <kbd>K</kbd></div></div>
+        <div class="shortcut-row"><span>Focus message composer</span><div><kbd>/</kbd></div></div>
+        <div class="shortcut-row"><span>Toggle sidebar</span><div><kbd>⌘ / Ctrl</kbd> + <kbd>B</kbd></div></div>
+        <div class="shortcut-row"><span>Open settings</span><div><kbd>⌘ / Ctrl</kbd> + <kbd>,</kbd></div></div>
+        <div class="shortcut-row"><span>Stop active generation</span><div><kbd>Esc</kbd></div></div>
+        <div class="shortcut-row"><span>Send message</span><div><kbd>Enter</kbd></div></div>
+        <div class="shortcut-row"><span>New line in composer</span><div><kbd>Shift</kbd> + <kbd>Enter</kbd></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Stack -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Modular App Scripts (works on https://, http://, subpaths, and file://) -->
+  <script src="./js/config.js" defer></script>
+  <script src="./js/storage.js" defer></script>
+  <script src="./js/markdown.js" defer></script>
+  <script src="./js/providers.js" defer></script>
+  <script src="./js/app.js" defer></script>
+</body>
+</html>
