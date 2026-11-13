@@ -8,10 +8,12 @@
 
   const state = {
     settings: Storage.loadSettings(),
-    apiKeys: { anthropic: '', openrouter: '' },
+    apiKeys: { pollinations: '', openrouter: '' },
     conversations: [],
     activeChatId: '',
     searchQuery: '',
+    modelSearchQuery: '',
+    modelFilter: 'all',
     stagedAttachments: [],
     editingMessageId: null,
     isStreaming: false,
@@ -21,7 +23,7 @@
     activeSpeechUtterance: null,
     recognition: null,
     isRecording: false,
-    modalDraftProvider: 'puter'
+    modalDraftProvider: 'pollinations'
   };
 
   const els = {};
@@ -32,22 +34,24 @@
       'new-chat-btn', 'chat-search-input', 'chat-search-clear', 'chat-list',
       'theme-toggle-btn', 'theme-label', 'open-data-btn', 'open-shortcuts-btn',
       'open-settings-btn', 'sidebar-settings-title', 'sidebar-settings-sub',
-      'model-select-btn', 'active-model-label', 'model-dropdown',
+      'model-switcher-wrap', 'model-select-btn', 'active-model-label', 'active-model-tag',
+      'model-dropdown', 'model-search-input', 'sync-models-btn', 'sync-models-icon',
+      'model-filter-tabs', 'model-options-list',
       'persona-select-btn', 'active-persona-label', 'persona-dropdown',
       'context-meter', 'context-tokens-text', 'connection-pill-btn', 'connection-dot', 'connection-label',
-      'export-md-btn', 'chat-viewport', 'welcome-screen', 'welcome-heading', 'welcome-connection-bar',
-      'starter-grid', 'messages-list', 'scroll-bottom-btn',
+      'export-md-btn', 'chat-viewport', 'welcome-screen', 'welcome-heading',
+      'welcome-model-chips', 'welcome-connection-bar', 'starter-grid', 'messages-list', 'scroll-bottom-btn',
       'edit-banner', 'cancel-edit-btn', 'attachment-tray', 'composer-card', 'composer-input',
-      'file-input', 'attach-btn', 'voice-btn', 'effort-btn', 'effort-label', 'effort-dropdown',
+      'file-input', 'attach-btn', 'voice-btn', 'composer-model-btn', 'composer-model-label',
       'draft-counter', 'stop-btn', 'send-btn',
       'artifact-drawer', 'artifact-iframe', 'artifact-refresh-btn', 'artifact-newtab-btn', 'artifact-close-btn',
       'drop-overlay',
       'settings-modal', 'close-settings-btn', 'cancel-settings-btn', 'save-settings-btn',
-      'provider-cards', 'anthropic-key-group', 'anthropic-key-input', 'anthropic-endpoint-input',
-      'openrouter-key-group', 'openrouter-key-input', 'openrouter-endpoint-input', 'ephemeral-keys-checkbox',
-      'settings-model-select', 'custom-model-input', 'temperature-range', 'temperature-val',
-      'max-tokens-input', 'settings-persona-select', 'custom-system-textarea',
-      'prompt-caching-checkbox', 'send-enter-checkbox',
+      'provider-cards', 'pollinations-config-group', 'auto-fallback-checkbox', 'private-mode-checkbox',
+      'pollinations-key-input', 'openrouter-key-group', 'openrouter-key-input', 'openrouter-endpoint-input',
+      'ephemeral-keys-checkbox', 'settings-model-select', 'custom-model-input',
+      'temperature-range', 'temperature-val', 'max-tokens-input',
+      'settings-persona-select', 'custom-system-textarea', 'send-enter-checkbox',
       'export-json-btn', 'import-json-input', 'clear-all-chats-btn',
       'shortcuts-modal', 'close-shortcuts-btn', 'toast-container', 'meta-theme-color'
     ];
@@ -63,6 +67,8 @@
   function init() {
     cacheElements();
     state.apiKeys = Storage.loadApiKeys(state.settings.ephemeralKeys);
+    captureByopHashToken();
+
     state.conversations = Storage.loadConversations();
     state.activeChatId = Storage.loadActiveChatId();
 
@@ -70,7 +76,6 @@
       state.activeChatId = state.conversations[0] ? state.conversations[0].id : '';
     }
 
-    // Collapse sidebar automatically on narrow viewports initially
     if (window.innerWidth <= 900) {
       els['app-shell'].classList.add('sidebar-collapsed');
     }
@@ -78,21 +83,41 @@
     applyTheme(state.settings.theme || 'dark');
     setGreetingHeading();
     renderStarterPrompts();
-    renderDropdownMenus();
+    renderModelOptionsList();
+    renderPersonaDropdown();
+    renderWelcomeModelChips();
     syncHeaderAndSidebarControls();
     renderChatList();
     renderActiveThread();
     initSpeechRecognition();
     bindEvents();
     updateSendButtonState();
+
+    // Non-blocking live catalog sync from pollinations.ai
+    syncModelsFromPollinations(false);
+  }
+
+  function captureByopHashToken() {
+    if (typeof window === 'undefined' || !window.location || !window.location.hash) return;
+    const match = window.location.hash.match(/api_key=(sk_[A-Za-z0-9_-]+)/);
+    if (match && match[1]) {
+      state.apiKeys.pollinations = match[1];
+      Storage.saveApiKeys(state.apiKeys, true);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+      setTimeout(function () {
+        showToast('Connected Pollinations token for session.');
+      }, 300);
+    }
   }
 
   function setGreetingHeading() {
     const hour = new Date().getHours();
-    let greeting = 'Fast thought, clear craft.';
-    if (hour >= 5 && hour < 12) greeting = 'Good morning — ready to build.';
-    else if (hour >= 12 && hour < 18) greeting = 'Good afternoon — think at Haiku speed.';
-    else if (hour >= 18 && hour < 23) greeting = 'Good evening — fast thought, clear craft.';
+    let greeting = 'Free AI chat, zero keys required.';
+    if (hour >= 5 && hour < 12) greeting = 'Good morning — pick a model & build.';
+    else if (hour >= 12 && hour < 18) greeting = 'Good afternoon — switch models on the fly.';
+    else if (hour >= 18 && hour < 23) greeting = 'Good evening — free AI chat, zero keys.';
     els['welcome-heading'].textContent = greeting;
   }
 
@@ -124,8 +149,52 @@
   }
 
   /* ========================================================================
-     Active Conversation Helpers
+     Active Conversation & Model Helpers
      ======================================================================== */
+
+  function getEffectiveModelId() {
+    return (state.settings.customModel || '').trim() || state.settings.model || 'openai-fast';
+  }
+
+  function selectActiveModel(modelId) {
+    const clean = String(modelId || '').trim();
+    if (!clean) return;
+    const known = Config.getModels().some(function (m) {
+      return m.id.toLowerCase() === clean.toLowerCase();
+    });
+    if (known) {
+      state.settings.model = clean;
+      state.settings.customModel = '';
+    } else {
+      state.settings.model = clean;
+      state.settings.customModel = clean;
+    }
+    Storage.saveSettings(state.settings);
+    renderModelOptionsList();
+    renderWelcomeModelChips();
+    syncHeaderAndSidebarControls();
+    closeAllDropdowns();
+    const meta = Config.getModelById(clean);
+    showToast('Switched model to ' + meta.name);
+  }
+
+  async function syncModelsFromPollinations(showFeedback) {
+    if (els['sync-models-btn']) els['sync-models-btn'].classList.add('is-syncing');
+    try {
+      const list = await Providers.fetchPollinationsModels(state.apiKeys.pollinations);
+      renderModelOptionsList();
+      renderWelcomeModelChips();
+      if (showFeedback) {
+        showToast('Synced ' + list.length + ' models from pollinations.ai');
+      }
+    } catch (_) {
+      if (showFeedback) {
+        showToast('Using built-in Pollinations model catalog.');
+      }
+    } finally {
+      if (els['sync-models-btn']) els['sync-models-btn'].classList.remove('is-syncing');
+    }
+  }
 
   function getActiveConversation() {
     return state.conversations.find(function (c) { return c.id === state.activeChatId; }) || null;
@@ -134,7 +203,7 @@
   function ensureActiveConversation() {
     let conv = getActiveConversation();
     if (!conv) {
-      conv = Storage.createEmptyConversation({ model: state.settings.model });
+      conv = Storage.createEmptyConversation({ model: getEffectiveModelId() });
       state.conversations.unshift(conv);
       state.activeChatId = conv.id;
       Storage.saveActiveChatId(conv.id);
@@ -155,7 +224,7 @@
   }
 
   /* ========================================================================
-     Header, Dropdowns & Sidebar Rendering
+     Model Switcher, Header & Sidebar Rendering
      ======================================================================== */
 
   function renderStarterPrompts() {
@@ -170,19 +239,79 @@
     }).join('');
   }
 
-  function renderDropdownMenus() {
-    // Model dropdown
-    els['model-dropdown'].innerHTML = Config.MODELS.map(function (m) {
-      const selected = m.id === state.settings.model ? ' is-selected' : '';
+  function renderWelcomeModelChips() {
+    if (!els['welcome-model-chips']) return;
+    const activeId = getEffectiveModelId().toLowerCase();
+    const featured = Config.getModels().slice(0, 7);
+
+    let html = featured.map(function (m) {
+      const isAct = m.id.toLowerCase() === activeId ? ' is-active' : '';
       return (
-        '<button type="button" class="dropdown-option' + selected + '" data-select-model="' + m.id + '" role="option">' +
-        '<div class="dropdown-opt-top"><span>' + Markdown.escapeHtml(m.name) + '</span><span class="dropdown-opt-badge">' + Markdown.escapeHtml(m.badge) + '</span></div>' +
-        '<div class="dropdown-opt-desc">' + Markdown.escapeHtml(m.description) + '</div>' +
+        '<button type="button" class="model-chip-btn' + isAct + '" data-quick-model="' + Markdown.escapeHtml(m.id) + '">' +
+        '<span>' + Markdown.escapeHtml(m.shortName || m.name) + '</span>' +
         '</button>'
       );
     }).join('');
 
-    // Persona dropdown
+    html += '<button type="button" class="model-chip-btn" data-open-switcher="true">+ All Models (' + Config.getModels().length + ')</button>';
+    els['welcome-model-chips'].innerHTML = html;
+  }
+
+  function renderModelOptionsList() {
+    if (!els['model-options-list']) return;
+    const activeId = getEffectiveModelId().toLowerCase();
+    const q = state.modelSearchQuery.trim().toLowerCase();
+    const filter = state.modelFilter;
+    const models = Config.getModels();
+
+    const filtered = models.filter(function (m) {
+      if (filter === 'free' && !m.keyless) return false;
+      if (filter === 'coding' && !m.isCoding) return false;
+      if (filter === 'reasoning' && !m.supportsReasoning) return false;
+      if (!q) return true;
+      return (
+        m.id.toLowerCase().includes(q) ||
+        (m.canonicalId && m.canonicalId.toLowerCase().includes(q)) ||
+        m.name.toLowerCase().includes(q) ||
+        (m.providerLabel && m.providerLabel.toLowerCase().includes(q)) ||
+        (m.description && m.description.toLowerCase().includes(q))
+      );
+    });
+
+    let html = filtered.map(function (m) {
+      const selected = m.id.toLowerCase() === activeId ? ' is-selected' : '';
+      return (
+        '<button type="button" class="dropdown-option' + selected + '" data-select-model="' + Markdown.escapeHtml(m.id) + '" role="option">' +
+        '<div class="dropdown-opt-top">' +
+        '<span>' + Markdown.escapeHtml(m.name) + '</span>' +
+        '<span class="dropdown-opt-badge">' + Markdown.escapeHtml(m.badge || m.providerLabel) + '</span>' +
+        '</div>' +
+        '<div class="dropdown-opt-desc">' +
+        '<span class="model-id-pill">' + Markdown.escapeHtml(m.id) + '</span> ' +
+        Markdown.escapeHtml(m.description || '') +
+        '</div>' +
+        '</button>'
+      );
+    }).join('');
+
+    // Allow choosing any custom typed Pollinations model ID directly
+    const rawTyped = state.modelSearchQuery.trim();
+    if (rawTyped && !models.some(function (m) { return m.id.toLowerCase() === rawTyped.toLowerCase(); })) {
+      html +=
+        '<button type="button" class="dropdown-option" data-select-model="' + Markdown.escapeHtml(rawTyped) + '">' +
+        '<div class="dropdown-opt-top"><span>Use custom ID: "' + Markdown.escapeHtml(rawTyped) + '"</span><span class="dropdown-opt-badge">CUSTOM</span></div>' +
+        '<div class="dropdown-opt-desc">Send requests directly to Pollinations with model="' + Markdown.escapeHtml(rawTyped) + '"</div>' +
+        '</button>';
+    }
+
+    if (!html) {
+      html = '<div class="chat-empty-note">No matching models. Type any Pollinations model ID above to use it.</div>';
+    }
+
+    els['model-options-list'].innerHTML = html;
+  }
+
+  function renderPersonaDropdown() {
     els['persona-dropdown'].innerHTML = Config.PERSONAS.map(function (p) {
       const selected = p.id === state.settings.personaId ? ' is-selected' : '';
       return (
@@ -192,98 +321,68 @@
         '</button>'
       );
     }).join('');
-
-    // Effort dropdown
-    els['effort-dropdown'].innerHTML = Config.EFFORT_LEVELS.map(function (e) {
-      const selected = e.id === state.settings.effort ? ' is-selected' : '';
-      return (
-        '<button type="button" class="dropdown-option' + selected + '" data-select-effort="' + e.id + '" role="option">' +
-        '<div class="dropdown-opt-top"><span>' + Markdown.escapeHtml(e.label) + '</span><span class="dropdown-opt-badge">' + Markdown.escapeHtml(e.id.toUpperCase()) + '</span></div>' +
-        '<div class="dropdown-opt-desc">' + Markdown.escapeHtml(e.detail) + '</div>' +
-        '</button>'
-      );
-    }).join('');
   }
 
   function syncHeaderAndSidebarControls() {
-    const model = Config.getModelById(state.settings.model);
-    const customModel = (state.settings.customModel || '').trim();
+    const activeId = getEffectiveModelId();
+    const model = Config.getModelById(activeId);
     const persona = Config.PERSONAS.find(function (p) { return p.id === state.settings.personaId; }) || Config.PERSONAS[0];
-    const effortObj = Config.EFFORT_LEVELS.find(function (e) { return e.id === state.settings.effort; }) || Config.EFFORT_LEVELS[2];
     const provider = Config.getProviderById(state.settings.provider);
 
-    els['active-model-label'].textContent = customModel || model.name;
+    els['active-model-label'].textContent = model.name;
+    els['active-model-tag'].textContent = model.providerLabel || 'Pollinations';
+    els['composer-model-label'].textContent = model.shortName || model.name;
     els['active-persona-label'].textContent = persona.name;
-    els['effort-label'].textContent = effortObj.label;
-    els['sidebar-settings-sub'].textContent = (customModel || model.shortName) + ' · ' + persona.name;
+    els['sidebar-settings-sub'].textContent = (model.shortName || model.name) + ' · ' + persona.name;
 
-    // Connection status indicator
     els['connection-dot'].className = 'status-dot';
     if (provider.id === 'demo') {
       els['connection-dot'].classList.add('status-demo');
-      els['connection-label'].textContent = 'Sandbox Preview';
-    } else if (provider.id === 'anthropic') {
-      const hasKey = Boolean(state.apiKeys.anthropic && state.apiKeys.anthropic.trim());
-      els['connection-dot'].classList.add(hasKey ? 'status-ready' : 'status-warn');
-      els['connection-label'].textContent = hasKey ? 'Anthropic API' : 'Anthropic · Add Key';
+      els['connection-label'].textContent = 'Offline Sandbox';
     } else if (provider.id === 'openrouter') {
-      const hasOrKey = Boolean(state.apiKeys.openrouter && state.apiKeys.openrouter.trim());
-      els['connection-dot'].classList.add(hasOrKey ? 'status-ready' : 'status-warn');
-      els['connection-label'].textContent = hasOrKey ? 'OpenRouter' : 'OpenRouter · Add Key';
+      els['connection-dot'].classList.add('status-ready');
+      els['connection-label'].textContent = 'Custom Gateway';
     } else {
       els['connection-dot'].classList.add('status-ready');
-      els['connection-label'].textContent = 'Puter Cloud · Free';
+      const hasOptToken = Boolean(state.apiKeys.pollinations && state.apiKeys.pollinations.trim());
+      els['connection-label'].textContent = hasOptToken ? 'Pollinations · Token' : 'Pollinations · No Key';
     }
 
-    renderWelcomeConnectionBar(provider);
+    renderWelcomeConnectionBar(provider, model);
     updateContextMeter();
   }
 
-  function renderWelcomeConnectionBar(provider) {
+  function renderWelcomeConnectionBar(provider, model) {
     if (!els['welcome-connection-bar']) return;
-    if (provider.id === 'puter') {
+    if (provider.id === 'pollinations') {
       els['welcome-connection-bar'].innerHTML =
-        '<span>Connected via <strong>Puter Cloud</strong> (zero API key required on GitHub Pages).</span>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Use Anthropic Key</button>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="switch-demo">Try Offline Sandbox</button>';
-    } else if (provider.id === 'anthropic') {
-      const hasKey = Boolean(state.apiKeys.anthropic && state.apiKeys.anthropic.trim());
-      els['welcome-connection-bar'].innerHTML = hasKey
-        ? '<span>Direct browser CORS ready for <strong>api.anthropic.com</strong> (<code>claude-haiku-5-5</code>).</span>' +
-          '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Settings</button>'
-        : '<span><strong>Anthropic API selected</strong> — add your <code>sk-ant-…</code> key to start streaming.</span>' +
-          '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Add API Key</button>' +
-          '<button type="button" class="inline-action-btn" data-quick-action="switch-puter">Use Free Puter Cloud</button>';
+        '<span>Ready on <strong>pollinations.ai</strong> (no API key needed) · Active model: <code>' + Markdown.escapeHtml(model.id) + '</code></span>' +
+        '<button type="button" class="inline-action-btn" data-open-switcher="true">Switch Model</button>' +
+        '<button type="button" class="inline-action-btn" data-quick-action="switch-demo">Offline Sandbox</button>';
     } else if (provider.id === 'demo') {
       els['welcome-connection-bar'].innerHTML =
-        '<span><strong>Interactive Sandbox</strong> active — instant offline preview of streaming, code &amp; live HTML artifacts.</span>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="switch-puter">Switch to Live Puter Cloud</button>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Use Anthropic Key</button>';
+        '<span><strong>Offline Sandbox</strong> active — instant local simulation of streaming &amp; live HTML previews.</span>' +
+        '<button type="button" class="inline-action-btn" data-quick-action="switch-pollinations">Switch to Live Pollinations.ai</button>';
     } else {
       els['welcome-connection-bar'].innerHTML =
-        '<span>Connected via <strong>OpenRouter / Custom Gateway</strong>.</span>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Configure</button>';
+        '<span>Using <strong>Custom OpenAI / OpenRouter Gateway</strong>.</span>' +
+        '<button type="button" class="inline-action-btn" data-quick-action="open-keys">Configure</button>' +
+        '<button type="button" class="inline-action-btn" data-quick-action="switch-pollinations">Use Pollinations Keyless</button>';
     }
   }
 
   function updateContextMeter() {
     const conv = getActiveConversation();
     if (!conv || !conv.messages.length) {
-      els['context-tokens-text'].textContent = '0 / 1M tok';
+      els['context-tokens-text'].textContent = '0 tok';
       return;
     }
-    let inTok = 0;
-    let outTok = 0;
+    let total = 0;
     conv.messages.forEach(function (m) {
-      const est = Config.estimateTokens((m.content || '') + (m.thinking || ''));
-      if (m.role === 'user') inTok += est;
-      else outTok += est;
+      total += Config.estimateTokens((m.content || '') + (m.thinking || ''));
     });
-    const total = inTok + outTok;
-    const cost = Config.estimateConversationCost(inTok, outTok, state.settings.model);
     const tokLabel = total >= 1000 ? (total / 1000).toFixed(1) + 'k' : String(total);
-    const costLabel = cost < 0.0001 ? '<$0.0001' : '$' + cost.toFixed(4);
-    els['context-tokens-text'].textContent = tokLabel + ' / 1M · ' + costLabel;
+    els['context-tokens-text'].textContent = '~' + tokLabel + ' tok';
   }
 
   function renderChatList() {
@@ -359,7 +458,7 @@
       return buildMessageRowHtml(msg, isLast && state.isStreaming);
     }).join('');
 
-    scrollToBottom(true);
+    scrollToBottom();
     updateContextMeter();
   }
 
@@ -387,10 +486,19 @@
       );
     }
 
-    // Assistant message
-    const modelLabel = Markdown.escapeHtml(msg.modelLabel || 'Claude Haiku 5.5');
-    const speedBadge = msg.speedTokSec
-      ? '<span class="msg-speed-badge">' + msg.speedTokSec + ' tok/s</span>'
+    const modelLabel = Markdown.escapeHtml(msg.modelLabel || msg.model || 'Pollinations AI');
+    const metaParts = [];
+    if (msg.model && msg.modelLabel && msg.model !== msg.modelLabel) {
+      metaParts.push(Markdown.escapeHtml(msg.model));
+    }
+    if (msg.speedTokSec) {
+      metaParts.push(msg.speedTokSec + ' tok/s');
+    }
+    if (msg.fallbackFrom) {
+      metaParts.push('keyless fallback from ' + Markdown.escapeHtml(msg.fallbackFrom));
+    }
+    const speedBadge = metaParts.length
+      ? '<span class="msg-speed-badge">' + metaParts.join(' · ') + '</span>'
       : '';
 
     let thinkingHtml = '';
@@ -398,7 +506,7 @@
       const isStillThinking = isActivelyStreaming && !msg.content;
       const secs = msg.thinkingMs ? (msg.thinkingMs / 1000).toFixed(1) + 's' : '';
       const summaryText = isStillThinking
-        ? 'Thinking adaptively…'
+        ? 'Reasoning…'
         : 'Thought process' + (secs ? ' · ' + secs : '');
       thinkingHtml =
         '<details class="thinking-box' + (isStillThinking ? ' is-thinking' : '') + '"' + (isStillThinking ? ' open' : '') + '>' +
@@ -424,11 +532,11 @@
     if (msg.error) {
       errorHtml =
         '<div class="msg-error-card">' +
-        '<div><strong>Connection Notice:</strong> ' + Markdown.escapeHtml(msg.error) + '</div>' +
+        '<div><strong>Notice:</strong> ' + Markdown.escapeHtml(msg.error) + '</div>' +
         '<div class="msg-error-actions">' +
         '<button type="button" class="inline-action-btn" data-msg-action="retry" data-msg-id="' + msg.id + '">Retry</button>' +
-        '<button type="button" class="inline-action-btn" data-quick-action="open-keys">API Key Settings</button>' +
-        '<button type="button" class="inline-action-btn" data-msg-action="retry-demo" data-msg-id="' + msg.id + '">Try in Sandbox Preview</button>' +
+        '<button type="button" class="inline-action-btn" data-msg-action="retry-fast" data-msg-id="' + msg.id + '">Retry with GPT-5 Nano (Fast)</button>' +
+        '<button type="button" class="inline-action-btn" data-msg-action="retry-demo" data-msg-id="' + msg.id + '">Try in Offline Sandbox</button>' +
         '</div>' +
         '</div>';
     }
@@ -437,7 +545,7 @@
       ? ''
       : '<div class="msg-actions">' +
         '<button type="button" class="msg-action-btn" data-msg-action="copy" data-msg-id="' + msg.id + '">Copy</button>' +
-        '<button type="button" class="msg-action-btn" data-msg-action="regenerate" data-msg-id="' + msg.id + '">Regenerate</button>' +
+        '<button type="button" class="msg-action-btn" data-msg-action="regenerate" data-msg-id="' + msg.id + '" title="Regenerate using currently selected model">Regenerate</button>' +
         '<button type="button" class="msg-action-btn" data-msg-action="speak" data-msg-id="' + msg.id + '">Read aloud</button>' +
         '</div>';
 
@@ -465,7 +573,6 @@
       renderActiveThread();
       return;
     }
-    // Preserve open state of user-toggled thinking accordion during streaming
     const prevDetails = existing.querySelector('details.thinking-box');
     const wasOpen = prevDetails ? prevDetails.open : null;
 
@@ -496,7 +603,6 @@
 
     const conv = ensureActiveConversation();
 
-    // If editing an existing user message, truncate from that message onward
     if (state.editingMessageId) {
       const editIdx = conv.messages.findIndex(function (m) { return m.id === state.editingMessageId; });
       if (editIdx !== -1) {
@@ -518,16 +624,14 @@
       conv.title = Storage.deriveTitleFromText(text || (userMsg.attachments[0] && userMsg.attachments[0].name));
     }
     conv.updatedAt = Date.now();
-    conv.model = state.settings.model;
+    conv.model = getEffectiveModelId();
 
-    // Clear composer & staged attachments
     els['composer-input'].value = '';
     autoResizeComposer();
     state.stagedAttachments = [];
     renderAttachmentTray();
     updateSendButtonState();
 
-    // Re-sort active chat to top (within pinned/unpinned group)
     promoteConversation(conv.id);
     Storage.saveConversations(state.conversations);
     renderChatList();
@@ -536,15 +640,16 @@
   }
 
   async function generateAssistantReply(conv) {
-    const modelObj = Config.getModelById(state.settings.model);
+    const chosenId = getEffectiveModelId();
+    const modelObj = Config.getModelById(chosenId);
     const assistantMsg = {
       id: Storage.uid('msg'),
       role: 'assistant',
       content: '',
       thinking: '',
       thinkingMs: 0,
-      model: state.settings.model,
-      modelLabel: (state.settings.customModel || '').trim() || modelObj.name,
+      model: chosenId,
+      modelLabel: modelObj.name,
       provider: state.settings.provider,
       createdAt: Date.now(),
       error: ''
@@ -570,7 +675,7 @@
         rafPending = false;
         updateSingleMessageDom(assistantMsg, state.isStreaming);
         if (!state.userScrolledUp) {
-          scrollToBottom(false);
+          scrollToBottom();
         }
       });
     }
@@ -602,6 +707,15 @@
         }
       });
 
+      if (result && result.model) {
+        assistantMsg.model = result.model;
+        const resolvedMeta = Config.getModelById(result.model.replace(' (sandbox)', ''));
+        assistantMsg.modelLabel = resolvedMeta.name;
+      }
+      if (result && result.fallbackFrom) {
+        assistantMsg.fallbackFrom = result.fallbackFrom;
+      }
+
       const elapsedSec = Math.max(0.08, (performance.now() - (tFirstToken || tStart)) / 1000);
       const outTokens = (result && result.usage && result.usage.outputTokens) ||
         Config.estimateTokens(assistantMsg.content);
@@ -625,7 +739,7 @@
       Storage.saveConversations(state.conversations);
       updateContextMeter();
       if (!state.userScrolledUp) {
-        scrollToBottom(false);
+        scrollToBottom();
       }
     }
   }
@@ -709,14 +823,12 @@
       reader.onload = function () {
         const rawDataUrl = String(reader.result || '');
         if (file.type === 'image/gif') {
-          const base64Gif = rawDataUrl.split(',')[1] || '';
           resolve({
             id: Storage.uid('att'),
             kind: 'image',
             name: file.name || 'image.gif',
             mimeType: 'image/gif',
-            dataUrl: rawDataUrl,
-            base64: base64Gif
+            dataUrl: rawDataUrl
           });
           return;
         }
@@ -724,7 +836,7 @@
         const img = new Image();
         img.onerror = reject;
         img.onload = function () {
-          const maxDim = 1568;
+          const maxDim = 1280;
           let w = img.width;
           let h = img.height;
           if (w > maxDim || h > maxDim) {
@@ -738,14 +850,13 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
           const outMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-          const outDataUrl = canvas.toDataURL(outMime, 0.88);
+          const outDataUrl = canvas.toDataURL(outMime, 0.86);
           resolve({
             id: Storage.uid('att'),
             kind: 'image',
             name: file.name || 'pasted-image.jpg',
             mimeType: outMime,
-            dataUrl: outDataUrl,
-            base64: outDataUrl.split(',')[1] || ''
+            dataUrl: outDataUrl
           });
         };
         img.src = rawDataUrl;
@@ -869,22 +980,25 @@
   function openSettingsModal(initialTab) {
     state.modalDraftProvider = state.settings.provider;
 
-    // Populate fields
-    els['anthropic-key-input'].value = state.apiKeys.anthropic || '';
+    els['auto-fallback-checkbox'].checked = state.settings.autoFallbackFree !== false;
+    els['private-mode-checkbox'].checked = state.settings.privateMode !== false;
+    els['pollinations-key-input'].value = state.apiKeys.pollinations || '';
     els['openrouter-key-input'].value = state.apiKeys.openrouter || '';
-    els['anthropic-endpoint-input'].value = state.settings.anthropicEndpoint || 'https://api.anthropic.com/v1/messages';
     els['openrouter-endpoint-input'].value = state.settings.openRouterEndpoint || 'https://openrouter.ai/api/v1/chat/completions';
     els['ephemeral-keys-checkbox'].checked = Boolean(state.settings.ephemeralKeys);
 
-    els['settings-model-select'].innerHTML = Config.MODELS.map(function (m) {
-      return '<option value="' + m.id + '">' + Markdown.escapeHtml(m.name + ' (' + m.id + ')') + '</option>';
+    const models = Config.getModels();
+    els['settings-model-select'].innerHTML = models.map(function (m) {
+      return '<option value="' + Markdown.escapeHtml(m.id) + '">' + Markdown.escapeHtml(m.name + ' (' + m.id + ')') + '</option>';
     }).join('');
-    els['settings-model-select'].value = state.settings.model;
+    if (models.some(function (m) { return m.id === state.settings.model; })) {
+      els['settings-model-select'].value = state.settings.model;
+    }
     els['custom-model-input'].value = state.settings.customModel || '';
 
     els['temperature-range'].value = String(state.settings.temperature);
     els['temperature-val'].textContent = Number(state.settings.temperature).toFixed(2);
-    els['max-tokens-input'].value = String(state.settings.maxTokens || 8192);
+    els['max-tokens-input'].value = String(state.settings.maxTokens || 4096);
 
     els['settings-persona-select'].innerHTML = Config.PERSONAS.map(function (p) {
       return '<option value="' + p.id + '">' + Markdown.escapeHtml(p.name) + '</option>';
@@ -892,7 +1006,6 @@
     els['settings-persona-select'].value = state.settings.personaId;
     els['custom-system-textarea'].value = state.settings.customSystemPrompt || getActiveSystemPrompt();
 
-    els['prompt-caching-checkbox'].checked = Boolean(state.settings.promptCaching);
     els['send-enter-checkbox'].checked = Boolean(state.settings.sendOnEnter);
 
     renderProviderCardsInModal();
@@ -911,7 +1024,7 @@
       );
     }).join('');
 
-    els['anthropic-key-group'].classList.toggle('hidden', state.modalDraftProvider !== 'anthropic');
+    els['pollinations-config-group'].classList.toggle('hidden', state.modalDraftProvider !== 'pollinations');
     els['openrouter-key-group'].classList.toggle('hidden', state.modalDraftProvider !== 'openrouter');
   }
 
@@ -929,14 +1042,15 @@
 
   function saveSettingsFromModal() {
     state.settings.provider = state.modalDraftProvider;
-    state.settings.anthropicEndpoint = els['anthropic-endpoint-input'].value.trim() || 'https://api.anthropic.com/v1/messages';
+    state.settings.autoFallbackFree = els['auto-fallback-checkbox'].checked;
+    state.settings.privateMode = els['private-mode-checkbox'].checked;
     state.settings.openRouterEndpoint = els['openrouter-endpoint-input'].value.trim() || 'https://openrouter.ai/api/v1/chat/completions';
     state.settings.ephemeralKeys = els['ephemeral-keys-checkbox'].checked;
 
-    state.settings.model = els['settings-model-select'].value || 'claude-haiku-5-5';
+    state.settings.model = els['settings-model-select'].value || 'openai-fast';
     state.settings.customModel = els['custom-model-input'].value.trim();
     state.settings.temperature = Number(els['temperature-range'].value);
-    state.settings.maxTokens = Math.min(128000, Math.max(256, Number(els['max-tokens-input'].value) || 8192));
+    state.settings.maxTokens = Math.min(32768, Math.max(256, Number(els['max-tokens-input'].value) || 4096));
     state.settings.personaId = els['settings-persona-select'].value || 'default';
 
     const selectedPersona = Config.PERSONAS.find(function (p) { return p.id === state.settings.personaId; });
@@ -947,35 +1061,53 @@
       state.settings.customSystemPrompt = typedPrompt;
     }
 
-    state.settings.promptCaching = els['prompt-caching-checkbox'].checked;
     state.settings.sendOnEnter = els['send-enter-checkbox'].checked;
 
     state.apiKeys = {
-      anthropic: els['anthropic-key-input'].value.trim(),
+      pollinations: els['pollinations-key-input'].value.trim(),
       openrouter: els['openrouter-key-input'].value.trim()
     };
 
     Storage.saveSettings(state.settings);
     Storage.saveApiKeys(state.apiKeys, state.settings.ephemeralKeys);
 
-    renderDropdownMenus();
+    renderModelOptionsList();
+    renderPersonaDropdown();
+    renderWelcomeModelChips();
     syncHeaderAndSidebarControls();
     els['settings-modal'].classList.add('hidden');
     showToast('Settings saved.');
   }
 
   /* ========================================================================
-     UI Helpers (Scroll, Composer, Edit Mode, Downloads)
+     UI Helpers (Model Switcher Toggle, Scroll, Composer, Downloads)
      ======================================================================== */
 
-  function scrollToBottom(instant) {
+  function toggleModelSwitcher(forceOpen) {
+    const isHidden = els['model-dropdown'].classList.contains('hidden');
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isHidden;
+    closeAllDropdowns();
+    if (shouldOpen) {
+      els['model-dropdown'].classList.remove('hidden');
+      els['model-select-btn'].setAttribute('aria-expanded', 'true');
+      renderModelOptionsList();
+      setTimeout(function () {
+        if (els['model-search-input']) els['model-search-input'].focus();
+      }, 20);
+    }
+  }
+
+  function closeAllDropdowns() {
+    ['model-dropdown', 'persona-dropdown'].forEach(function (id) {
+      if (els[id]) els[id].classList.add('hidden');
+    });
+    if (els['model-select-btn']) els['model-select-btn'].setAttribute('aria-expanded', 'false');
+  }
+
+  function scrollToBottom() {
     const vp = els['chat-viewport'];
     if (!vp) return;
-    if (instant) {
-      vp.scrollTop = vp.scrollHeight;
-    } else {
-      vp.scrollTop = vp.scrollHeight;
-    }
+    vp.scrollTop = vp.scrollHeight;
     els['scroll-bottom-btn'].classList.add('hidden');
   }
 
@@ -1010,12 +1142,6 @@
   function exitEditMode() {
     state.editingMessageId = null;
     els['edit-banner'].classList.add('hidden');
-  }
-
-  function closeAllDropdowns() {
-    ['model-dropdown', 'persona-dropdown', 'effort-dropdown'].forEach(function (id) {
-      if (els[id]) els[id].classList.add('hidden');
-    });
   }
 
   function triggerDownload(filename, content, mimeType) {
@@ -1055,7 +1181,7 @@
     if (existingEmpty) {
       state.activeChatId = existingEmpty.id;
     } else {
-      const fresh = Storage.createEmptyConversation({ model: state.settings.model });
+      const fresh = Storage.createEmptyConversation({ model: getEffectiveModelId() });
       state.conversations.unshift(fresh);
       state.activeChatId = fresh.id;
       Storage.saveConversations(state.conversations);
@@ -1074,7 +1200,6 @@
      ======================================================================== */
 
   function bindEvents() {
-    // Sidebar toggle
     els['sidebar-close-btn'].addEventListener('click', function () {
       els['app-shell'].classList.add('sidebar-collapsed');
     });
@@ -1085,7 +1210,6 @@
       els['app-shell'].classList.add('sidebar-collapsed');
     });
 
-    // New Chat & Search
     els['new-chat-btn'].addEventListener('click', startNewChat);
     els['chat-search-input'].addEventListener('input', function (e) {
       state.searchQuery = e.target.value;
@@ -1097,7 +1221,6 @@
       renderChatList();
     });
 
-    // Chat history delegation
     els['chat-list'].addEventListener('click', function (e) {
       const actionBtn = e.target.closest('[data-chat-action]');
       if (actionBtn) {
@@ -1167,7 +1290,6 @@
       els['shortcuts-modal'].classList.add('hidden');
     });
 
-    // Modal tabs & controls
     document.querySelectorAll('.modal-tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         switchSettingsTab(tab.getAttribute('data-tab'));
@@ -1216,7 +1338,7 @@
 
     els['export-json-btn'].addEventListener('click', function () {
       const json = Storage.exportWorkspacePayload(state.conversations, state.settings);
-      triggerDownload('haiku-5-5-workspace-backup.json', json, 'application/json;charset=utf-8');
+      triggerDownload('pollichat-workspace-backup.json', json, 'application/json;charset=utf-8');
       showToast('Workspace JSON backup downloaded.');
     });
 
@@ -1257,35 +1379,60 @@
       showToast('All local chats cleared.');
     });
 
-    // Header & Toolbar Dropdowns
+    // Searchable Multi-Model Switcher Events
     els['model-select-btn'].addEventListener('click', function (e) {
       e.stopPropagation();
-      const hidden = els['model-dropdown'].classList.contains('hidden');
-      closeAllDropdowns();
-      els['model-dropdown'].classList.toggle('hidden', !hidden);
+      toggleModelSwitcher();
     });
+
+    els['composer-model-btn'].addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleModelSwitcher(true);
+    });
+
+    els['model-dropdown'].addEventListener('click', function (e) {
+      e.stopPropagation();
+      const opt = e.target.closest('[data-select-model]');
+      if (opt) {
+        selectActiveModel(opt.getAttribute('data-select-model'));
+      }
+    });
+
+    els['model-search-input'].addEventListener('input', function (e) {
+      state.modelSearchQuery = e.target.value;
+      renderModelOptionsList();
+    });
+
+    els['model-search-input'].addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        const firstOpt = els['model-options-list'].querySelector('[data-select-model]');
+        if (firstOpt) {
+          e.preventDefault();
+          selectActiveModel(firstOpt.getAttribute('data-select-model'));
+        }
+      }
+    });
+
+    els['model-filter-tabs'].addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-model-filter]');
+      if (!btn) return;
+      state.modelFilter = btn.getAttribute('data-model-filter');
+      els['model-filter-tabs'].querySelectorAll('.model-filter-pill').forEach(function (p) {
+        p.classList.toggle('is-active', p === btn);
+      });
+      renderModelOptionsList();
+    });
+
+    els['sync-models-btn'].addEventListener('click', function () {
+      syncModelsFromPollinations(true);
+    });
+
+    // Persona dropdown
     els['persona-select-btn'].addEventListener('click', function (e) {
       e.stopPropagation();
       const hidden = els['persona-dropdown'].classList.contains('hidden');
       closeAllDropdowns();
       els['persona-dropdown'].classList.toggle('hidden', !hidden);
-    });
-    els['effort-btn'].addEventListener('click', function (e) {
-      e.stopPropagation();
-      const hidden = els['effort-dropdown'].classList.contains('hidden');
-      closeAllDropdowns();
-      els['effort-dropdown'].classList.toggle('hidden', !hidden);
-    });
-
-    els['model-dropdown'].addEventListener('click', function (e) {
-      const opt = e.target.closest('[data-select-model]');
-      if (!opt) return;
-      state.settings.model = opt.getAttribute('data-select-model');
-      state.settings.customModel = '';
-      Storage.saveSettings(state.settings);
-      renderDropdownMenus();
-      syncHeaderAndSidebarControls();
-      closeAllDropdowns();
     });
 
     els['persona-dropdown'].addEventListener('click', function (e) {
@@ -1295,26 +1442,29 @@
       state.settings.personaId = pid;
       if (pid !== 'custom') state.settings.customSystemPrompt = '';
       Storage.saveSettings(state.settings);
-      renderDropdownMenus();
+      renderPersonaDropdown();
       syncHeaderAndSidebarControls();
       closeAllDropdowns();
       if (pid === 'custom') openSettingsModal('model');
     });
 
-    els['effort-dropdown'].addEventListener('click', function (e) {
-      const opt = e.target.closest('[data-select-effort]');
-      if (!opt) return;
-      state.settings.effort = opt.getAttribute('data-select-effort');
-      Storage.saveSettings(state.settings);
-      renderDropdownMenus();
-      syncHeaderAndSidebarControls();
-      closeAllDropdowns();
-    });
-
+    // Global clicks (welcome chips, quick switches, outside dropdown close)
     document.addEventListener('click', function (e) {
       if (!e.target.closest('.dropdown-wrap')) closeAllDropdowns();
 
-      // Quick provider switch / key buttons anywhere in viewport
+      const quickModel = e.target.closest('[data-quick-model]');
+      if (quickModel) {
+        selectActiveModel(quickModel.getAttribute('data-quick-model'));
+        return;
+      }
+
+      const openSw = e.target.closest('[data-open-switcher]');
+      if (openSw) {
+        e.stopPropagation();
+        toggleModelSwitcher(true);
+        return;
+      }
+
       const quick = e.target.closest('[data-quick-action]');
       if (quick) {
         const act = quick.getAttribute('data-quick-action');
@@ -1324,12 +1474,12 @@
           state.settings.provider = 'demo';
           Storage.saveSettings(state.settings);
           syncHeaderAndSidebarControls();
-          showToast('Switched to Interactive Sandbox.');
-        } else if (act === 'switch-puter') {
-          state.settings.provider = 'puter';
+          showToast('Switched to Offline Sandbox.');
+        } else if (act === 'switch-pollinations') {
+          state.settings.provider = 'pollinations';
           Storage.saveSettings(state.settings);
           syncHeaderAndSidebarControls();
-          showToast('Switched to Puter Cloud (Claude Haiku 5.5).');
+          showToast('Switched to live Pollinations.ai (no key needed).');
         }
       }
     });
@@ -1342,7 +1492,7 @@
       if (item) handleSendMessage(item.prompt);
     });
 
-    // Delegated actions inside messages (copy code, preview HTML, edit, regenerate, speak)
+    // Delegated actions inside messages
     els['messages-list'].addEventListener('click', function (e) {
       const copyCodeBtn = e.target.closest('[data-copy-code]');
       if (copyCodeBtn) {
@@ -1381,8 +1531,16 @@
           enterEditMode(msg);
         } else if (action === 'speak') {
           speakText(msg.content || '');
-        } else if ((action === 'regenerate' || action === 'retry' || action === 'retry-demo') && !state.isStreaming) {
-          if (action === 'retry-demo') {
+        } else if ((action === 'regenerate' || action === 'retry' || action === 'retry-fast' || action === 'retry-demo') && !state.isStreaming) {
+          if (action === 'retry-fast') {
+            state.settings.provider = 'pollinations';
+            state.settings.model = 'openai-fast';
+            state.settings.customModel = '';
+            Storage.saveSettings(state.settings);
+            renderModelOptionsList();
+            renderWelcomeModelChips();
+            syncHeaderAndSidebarControls();
+          } else if (action === 'retry-demo') {
             state.settings.provider = 'demo';
             Storage.saveSettings(state.settings);
             syncHeaderAndSidebarControls();
@@ -1479,7 +1637,7 @@
       else state.recognition.start();
     });
 
-    // Drag & Drop files anywhere on window
+    // Drag & Drop files
     let dragDepth = 0;
     window.addEventListener('dragenter', function (e) {
       if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
@@ -1507,7 +1665,10 @@
       const activeTag = document.activeElement && document.activeElement.tagName;
       const inInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
 
-      if (mod && e.key.toLowerCase() === 'k') {
+      if (mod && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        toggleModelSwitcher();
+      } else if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         startNewChat();
       } else if (mod && e.key.toLowerCase() === 'b') {
@@ -1535,7 +1696,6 @@
       }
     });
 
-    // Close modal when clicking backdrop
     ['settings-modal', 'shortcuts-modal'].forEach(function (id) {
       els[id].addEventListener('click', function (e) {
         if (e.target === els[id]) els[id].classList.add('hidden');

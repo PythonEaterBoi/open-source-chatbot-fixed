@@ -5,10 +5,10 @@
     (typeof require === 'function' ? require('./config.js') : null);
 
   const KEYS = {
-    CONVERSATIONS: 'haiku55_conversations_v1',
-    ACTIVE_CHAT_ID: 'haiku55_active_chat_v1',
-    SETTINGS: 'haiku55_settings_v1',
-    API_KEYS: 'haiku55_api_keys_v1'
+    CONVERSATIONS: 'pollichat_conversations_v2',
+    ACTIVE_CHAT_ID: 'pollichat_active_chat_v2',
+    SETTINGS: 'pollichat_settings_v2',
+    API_KEYS: 'pollichat_api_keys_v2'
   };
 
   const memoryFallback = new Map();
@@ -17,7 +17,7 @@
     try {
       const store = type === 'session' ? root.sessionStorage : root.localStorage;
       if (!store) return null;
-      const probe = '__haiku_probe__';
+      const probe = '__polli_probe__';
       store.setItem(probe, '1');
       store.removeItem(probe);
       return store;
@@ -90,21 +90,21 @@
     const rawSession = readRaw(KEYS.API_KEYS, true);
     const rawLocal = readRaw(KEYS.API_KEYS, false);
     const raw = ephemeral ? (rawSession || rawLocal) : (rawLocal || rawSession);
-    if (!raw) return { anthropic: '', openrouter: '' };
+    if (!raw) return { pollinations: '', openrouter: '' };
     try {
       const parsed = JSON.parse(raw);
       return {
-        anthropic: typeof parsed.anthropic === 'string' ? parsed.anthropic : '',
+        pollinations: typeof parsed.pollinations === 'string' ? parsed.pollinations : '',
         openrouter: typeof parsed.openrouter === 'string' ? parsed.openrouter : ''
       };
     } catch (_) {
-      return { anthropic: '', openrouter: '' };
+      return { pollinations: '', openrouter: '' };
     }
   }
 
   function saveApiKeys(keys, ephemeral) {
     const payload = JSON.stringify({
-      anthropic: (keys && keys.anthropic ? String(keys.anthropic).trim() : ''),
+      pollinations: (keys && keys.pollinations ? String(keys.pollinations).trim() : ''),
       openrouter: (keys && keys.openrouter ? String(keys.openrouter).trim() : '')
     });
     if (ephemeral) {
@@ -125,7 +125,7 @@
         pinned: false,
         createdAt: now,
         updatedAt: now,
-        model: 'claude-haiku-5-5',
+        model: 'openai-fast',
         messages: []
       },
       overrides || {}
@@ -148,7 +148,6 @@
 
   function saveConversations(conversations) {
     if (!Array.isArray(conversations)) return false;
-    // If quota is tight (e.g. many large image attachments), gracefully trim older attachment dataUrls if needed
     const serialized = JSON.stringify(conversations);
     const ok = writeRaw(KEYS.CONVERSATIONS, serialized, false);
     if (!ok && serialized.length > 3500000) {
@@ -192,7 +191,7 @@
       .replace(/[#>*_`~\[\]()]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!cleaned) return 'Image / File Analysis';
+    if (!cleaned) return 'Attachment Analysis';
     if (cleaned.length <= 46) return cleaned;
     return cleaned.slice(0, 45).replace(/\s+\S*$/, '') + '…';
   }
@@ -202,18 +201,20 @@
     const lines = [
       '# ' + (conversation.title || 'Conversation'),
       '',
-      '- **Model:** `' + (conversation.model || 'claude-haiku-5-5') + '`',
+      '- **Platform:** Pollinations.ai (`open-source-chatbot-fixed`)',
       '- **Exported:** ' + new Date().toISOString(),
       '',
       '---',
       ''
     ];
     (conversation.messages || []).forEach(function (msg) {
-      const speaker = msg.role === 'user' ? '## You' : '## Claude Haiku 5.5';
+      const speaker = msg.role === 'user'
+        ? '## You'
+        : '## ' + (msg.modelLabel || msg.model || 'Assistant');
       lines.push(speaker);
       lines.push('');
       if (msg.thinking && msg.thinking.trim()) {
-        lines.push('<details><summary>Thought process</summary>');
+        lines.push('<details><summary>Reasoning</summary>');
         lines.push('');
         lines.push(msg.thinking.trim());
         lines.push('');
@@ -234,13 +235,13 @@
   }
 
   function exportWorkspacePayload(conversations, settings) {
-    // Deliberately excludes API keys so backups are safe to share or commit
+    // Never include tokens/keys in exported backups
     const safeSettings = Object.assign({}, settings || {});
     return JSON.stringify(
       {
         app: 'open-source-chatbot-fixed',
-        model: 'claude-haiku-5-5',
-        version: 1,
+        provider: 'pollinations.ai',
+        version: 2,
         exportedAt: new Date().toISOString(),
         settings: safeSettings,
         conversations: Array.isArray(conversations) ? conversations : []
@@ -282,7 +283,7 @@
           pinned: Boolean(item.pinned),
           createdAt: Number(item.createdAt) || Date.now(),
           updatedAt: Number(item.updatedAt) || Date.now(),
-          model: typeof item.model === 'string' && item.model ? item.model : 'claude-haiku-5-5',
+          model: typeof item.model === 'string' && item.model ? item.model : 'openai-fast',
           messages: item.messages
             .filter(function (m) {
               return m && (m.role === 'user' || m.role === 'assistant');
@@ -296,8 +297,9 @@
                 thinkingMs: Number(m.thinkingMs) || 0,
                 attachments: Array.isArray(m.attachments) ? m.attachments : [],
                 createdAt: Number(m.createdAt) || Date.now(),
-                model: typeof m.model === 'string' ? m.model : 'claude-haiku-5-5',
-                provider: typeof m.provider === 'string' ? m.provider : ''
+                model: typeof m.model === 'string' ? m.model : 'openai-fast',
+                modelLabel: typeof m.modelLabel === 'string' ? m.modelLabel : '',
+                provider: typeof m.provider === 'string' ? m.provider : 'pollinations'
               };
             })
         };

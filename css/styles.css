@@ -657,6 +657,118 @@ kbd {
   animation: popIn 0.16s var(--ease-out);
 }
 
+.model-switcher-popover {
+  width: min(390px, calc(100vw - 24px));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-switcher-top {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.model-search-row {
+  display: flex;
+  gap: 6px;
+}
+
+.model-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-canvas);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.model-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sync-models-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.sync-models-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sync-models-btn.is-syncing #sync-models-icon {
+  display: inline-block;
+  animation: spin360 0.8s linear infinite;
+}
+
+@keyframes spin360 {
+  to { transform: rotate(360deg); }
+}
+
+.model-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.model-filter-pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.model-filter-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.model-filter-pill.is-active {
+  background: var(--accent-soft);
+  border-color: var(--border-accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.model-options-list {
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.model-id-pill {
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  color: var(--text-muted);
+  background: var(--bg-canvas);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
 .dropdown-menu.dropdown-up {
   top: auto;
   bottom: calc(100% + 8px);
@@ -843,12 +955,54 @@ kbd {
   border: 1px solid var(--border-subtle);
 }
 
+.welcome-models-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.welcome-models-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .capability-chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 7px;
+}
+
+.model-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.79rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.model-chip-btn:hover {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.model-chip-btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .cap-chip {
